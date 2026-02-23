@@ -116,17 +116,21 @@ class SJCL:
         count: int = 10000,
         dk_len: int = 16,
         iv_length: int = 16,
+        salt: bytes | None = None,
     ) -> dict[str, Any]:
         """Encrypt plaintext with given passphrase and return SJCL formatted data."""
         aes_mode = get_aes_mode(mode)
         tlen = DEFAULT_TLEN[aes_mode]
-
-        salt = get_random_bytes(self.salt_size)
         iv = get_random_bytes(iv_length)
 
-        key = PBKDF2(
-            passphrase, salt, count=count, dkLen=dk_len, hmac_hash_module=SHA256
-        )
+        if salt is None:
+            salt = get_random_bytes(self.salt_size)
+            key = PBKDF2(
+                passphrase, salt, count=count, dkLen=dk_len, hmac_hash_module=SHA256
+            )
+
+        else:
+            key = bytes.fromhex(passphrase)
 
         if aes_mode == AES.MODE_CCM:
             nonce = truncate_iv(iv, len(plaintext) * 8, tlen)

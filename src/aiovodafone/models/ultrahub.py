@@ -1,6 +1,5 @@
 """UltraHub Vodafone Station model API implementation."""
 
-import base64
 import contextlib
 import hashlib
 from datetime import UTC, datetime, timedelta
@@ -14,7 +13,6 @@ from aiohttp import (
     ClientSession,
     ClientTimeout,
 )
-from Crypto.Cipher import AES
 from yarl import URL
 
 from aiovodafone.api import VodafoneStationCommonApi, VodafoneStationDevice
@@ -32,7 +30,7 @@ from aiovodafone.exceptions import (
     GenericLoginError,
     GenericResponseError,
 )
-from aiovodafone.sjcl import DEFAULT_TLEN, get_aes_mode, get_random_bytes, truncate_iv
+from aiovodafone.sjcl import SJCL
 
 
 class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
@@ -110,6 +108,16 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
 
         raise GenericLoginError
 
+    async def _sjcl_derived_key(self, salt: str, salt_web_ui: str) -> bytes:
+        """Derive PBKDF2-HMAC-SHA256 key."""
+        return hashlib.pbkdf2_hmac(
+            "sha256",
+            salt_web_ui.encode("utf-8"),
+            bytes(salt, "utf-8"),
+            self._sjcl_iterations,
+            self._sjcl_dklen,
+        )
+
     async def _encrypt_string(
         self,
         salt: str,
@@ -129,40 +137,16 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
         """
         _LOGGER.debug("Calculate credential hash")
 
-        iv = get_random_bytes(16)
+        derived_key_bytes = (await self._sjcl_derived_key(salt, salt_web_ui)).hex()
 
-        key = hashlib.pbkdf2_hmac(
-            "sha256",
-            salt_web_ui.encode("utf-8"),
-            bytes(salt, "utf-8"),
-            self._sjcl_iterations,
-            self._sjcl_dklen,
+        value_dict = SJCL().encrypt(
+            self.password.encode("utf-8"),
+            derived_key_bytes,
+            mode="ccm",
+            count=self._sjcl_iterations,
+            dk_len=self._sjcl_dklen,
+            salt=salt_web_ui.encode("utf-8"),
         )
-
-        aes_mode = get_aes_mode("ccm")
-        tlen = DEFAULT_TLEN[aes_mode]
-        password = self.password.encode("utf-8")
-        nonce = truncate_iv(iv, len(password) * 8, tlen)
-        cipher = AES.new(key=key, mode=aes_mode, nonce=nonce, mac_len=tlen // 8)
-
-        ct2 = cipher.encrypt_and_digest(password)
-
-        ct = ct2[0] + ct2[1]
-
-        b64_ct = base64.b64encode(ct).decode("ascii").strip()
-        b64_iv = base64.b64encode(iv).decode("ascii").strip()
-
-        value_dict = {
-            "iv": b64_iv,
-            "v": 1,
-            "iter": self._sjcl_iterations,
-            "ks": 128,
-            "ts": tlen,
-            "mode": "ccm",
-            "adata": "",
-            "cipher": "aes",
-            "ct": b64_ct,
-        }
         return cast("str", orjson.dumps(value_dict).decode("utf-8"))
 
     async def _auto_hub_request_page_result(
