@@ -119,18 +119,18 @@ class SJCL:
         salt: bytes | None = None,
     ) -> dict[str, Any]:
         """Encrypt plaintext with given passphrase and return SJCL formatted data."""
+        has_salt = False
         aes_mode = get_aes_mode(mode)
         tlen = DEFAULT_TLEN[aes_mode]
         iv = get_random_bytes(iv_length)
 
         if salt is None:
             salt = get_random_bytes(self.salt_size)
-            key = PBKDF2(
-                passphrase, salt, count=count, dkLen=dk_len, hmac_hash_module=SHA256
-            )
+            has_salt = True
 
-        else:
-            key = bytes.fromhex(passphrase)
+        key = PBKDF2(
+            passphrase, salt, count=count, dkLen=dk_len, hmac_hash_module=SHA256
+        )
 
         if aes_mode == AES.MODE_CCM:
             nonce = truncate_iv(iv, len(plaintext) * 8, tlen)
@@ -144,15 +144,28 @@ class SJCL:
 
         ciphertext = ciphertext + mac
 
+        if has_salt:
+            return {
+                "salt": base64.b64encode(salt),
+                "iter": count,
+                "ks": dk_len * 8,
+                "ct": base64.b64encode(ciphertext),
+                "iv": base64.b64encode(iv),
+                "cipher": "aes",
+                "mode": mode,
+                "adata": "",
+                "v": 1,
+                "ts": tlen,
+            }
+
         return {
-            "salt": base64.b64encode(salt),
+            "iv": base64.b64encode(iv).decode("utf-8"),
+            "v": 1,
             "iter": count,
             "ks": dk_len * 8,
-            "ct": base64.b64encode(ciphertext),
-            "iv": base64.b64encode(iv),
-            "cipher": "aes",
+            "ts": tlen,
             "mode": mode,
             "adata": "",
-            "v": 1,
-            "ts": tlen,
+            "cipher": "aes",
+            "ct": base64.b64encode(ciphertext).decode("utf-8"),
         }

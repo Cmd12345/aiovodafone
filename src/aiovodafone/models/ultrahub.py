@@ -1,12 +1,11 @@
 """UltraHub Vodafone Station model API implementation."""
 
 import contextlib
-import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from http import HTTPMethod, HTTPStatus
-from typing import Any, cast
+from typing import Any
 
-import orjson
 from aiohttp import (
     ClientResponse,
     ClientResponseError,
@@ -42,8 +41,6 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
         """Initialize id as it may change in the future."""
         super().__init__(url, username, password, session)
         self.id = DEVICES_SETTINGS["UltraHub"]["default_id"]
-        self._sjcl_iterations = 1000
-        self._sjcl_dklen = 16
 
     async def login(self, force_logout: bool = False) -> bool:
         """Router login."""
@@ -79,10 +76,22 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
             web_secret = reply_json["X_VODAFONE_WebUISecret"]
             salt_web_ui = web_secret[:10]
             salt = web_secret[10:]
-            password = await self._encrypt_string(salt, salt_web_ui)
+
+            return_value = SJCL().encrypt(
+                self.password.encode("utf-8"),
+                salt_web_ui,
+                "ccm",
+                1000,
+                16,
+                16,
+                bytes(salt, "utf-8"),
+            )
+
+            a_value = json.dumps(return_value)
+
             payload = {
                 "__id": self.id,
-                "X_VODAFONE_Password": password,
+                "X_VODAFONE_Password": a_value,
                 "Push": str(force_logout).lower(),
                 "csrf_token": self.csrf_token,
             }
@@ -107,47 +116,6 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
             return True
 
         raise GenericLoginError
-
-    async def _sjcl_derived_key(self, salt: str, salt_web_ui: str) -> bytes:
-        """Derive PBKDF2-HMAC-SHA256 key."""
-        return hashlib.pbkdf2_hmac(
-            "sha256",
-            salt_web_ui.encode("utf-8"),
-            bytes(salt, "utf-8"),
-            self._sjcl_iterations,
-            self._sjcl_dklen,
-        )
-
-    async def _encrypt_string(
-        self,
-        salt: str,
-        salt_web_ui: str,
-    ) -> str:
-        """Calculate login hash (password), the salt and the salt (web UI).
-
-        Args:
-        ----
-            salt (str): salt given by the login response
-            salt_web_ui (str): salt given by the web UI
-
-        Returns:
-        -------
-            str: the hash for the session API
-
-        """
-        _LOGGER.debug("Calculate credential hash")
-
-        derived_key_bytes = (await self._sjcl_derived_key(salt, salt_web_ui)).hex()
-
-        value_dict = SJCL().encrypt(
-            self.password.encode("utf-8"),
-            derived_key_bytes,
-            mode="ccm",
-            count=self._sjcl_iterations,
-            dk_len=self._sjcl_dklen,
-            salt=salt_web_ui.encode("utf-8"),
-        )
-        return cast("str", orjson.dumps(value_dict).decode("utf-8"))
 
     async def _auto_hub_request_page_result(
         self,
