@@ -117,16 +117,17 @@ class SJCL:
         dk_len: int = 16,
         iv_length: int = 16,
         salt: bytes | None = None,
+        use_bytes: bool | None = True,
     ) -> dict[str, Any]:
         """Encrypt plaintext with given passphrase and return SJCL formatted data."""
-        has_salt = False
+        salt_was_generated = False
         aes_mode = get_aes_mode(mode)
         tlen = DEFAULT_TLEN[aes_mode]
         iv = get_random_bytes(iv_length)
 
         if salt is None:
             salt = get_random_bytes(self.salt_size)
-            has_salt = True
+            salt_was_generated = True
 
         key = PBKDF2(
             passphrase, salt, count=count, dkLen=dk_len, hmac_hash_module=SHA256
@@ -144,13 +145,27 @@ class SJCL:
 
         ciphertext = ciphertext + mac
 
-        if has_salt:
+        salt_out = (
+            base64.b64encode(salt)
+            if use_bytes
+            else base64.b64encode(salt).decode("utf-8")
+        )
+        iv_out = (
+            base64.b64encode(iv) if use_bytes else base64.b64encode(iv).decode("utf-8")
+        )
+        ct_out = (
+            base64.b64encode(ciphertext)
+            if use_bytes
+            else base64.b64encode(ciphertext).decode("utf-8")
+        )
+
+        if salt_was_generated:
             return {
-                "salt": base64.b64encode(salt),
+                "salt": salt_out,
                 "iter": count,
                 "ks": dk_len * 8,
-                "ct": base64.b64encode(ciphertext),
-                "iv": base64.b64encode(iv),
+                "ct": ct_out,
+                "iv": iv_out,
                 "cipher": "aes",
                 "mode": mode,
                 "adata": "",
@@ -159,7 +174,7 @@ class SJCL:
             }
 
         return {
-            "iv": base64.b64encode(iv).decode("utf-8"),
+            "iv": iv_out,
             "v": 1,
             "iter": count,
             "ks": dk_len * 8,
@@ -167,5 +182,5 @@ class SJCL:
             "mode": mode,
             "adata": "",
             "cipher": "aes",
-            "ct": base64.b64encode(ciphertext).decode("utf-8"),
+            "ct": ct_out,
         }

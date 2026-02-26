@@ -85,6 +85,7 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
                 16,
                 16,
                 bytes(salt, "utf-8"),
+                False,
             )
 
             a_value = json.dumps(return_value)
