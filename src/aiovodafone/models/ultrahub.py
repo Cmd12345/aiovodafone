@@ -60,7 +60,7 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
         if self.csrf_token == "":
             raise CannotAuthenticate
 
-        returned_keys = await self.obtain_hub_keys()
+        returned_keys = await self._obtain_hub_keys()
 
         value_dict = SJCL().encrypt(
             self.password.encode("utf-8"),
@@ -204,7 +204,7 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
         """Get Wi-Fi data."""
         data: dict[str, Any] = {WIFI_DATA: {}}
 
-        retuned_keys = await self.obtain_hub_keys()
+        retuned_keys = await self._obtain_hub_keys()
 
         ssids_json = await self._auto_hub_request_page_result(
             HTTPMethod.GET,
@@ -303,12 +303,11 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
 
             payload = {"body": bodt_str, "csrf_token": self.csrf_token}
 
-            with contextlib.suppress(GenericResponseError):
-                await self._auto_hub_request_page_result(
-                    HTTPMethod.POST, "api/wifi/bulk/update.jst", payload=payload
-                )
+            await self._auto_hub_request_page_result(
+                HTTPMethod.POST, "api/wifi/bulk/update.jst", payload=payload
+            )
 
-    async def obtain_hub_keys(
+    async def _obtain_hub_keys(
         self,
     ) -> dict[str, Any]:
         """Before doing an encyript or decryipt you need to get a key."""
