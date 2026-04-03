@@ -299,9 +299,9 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
         ):
             body = {"ssids": {"3": {"Enable": "true" if enable else "false"}}}
 
-            bodt_str = build_json_from_sjcl(body)
+            body_str = build_json_from_sjcl(body)
 
-            payload = {"body": bodt_str, "csrf_token": self.csrf_token}
+            payload = {"body": body_str, "csrf_token": self.csrf_token}
 
             await self._auto_hub_request_page_result(
                 HTTPMethod.POST, "api/wifi/bulk/update.jst", payload=payload
