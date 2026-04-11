@@ -292,14 +292,13 @@ class VodafoneStationUltraHubApi(VodafoneStationCommonApi):
         """Enable/Disable Wi-Fi."""
         _LOGGER.debug("Set wifi status for %s", band)
 
-        if (
-            hasattr(self, "session")
-            and self.csrf_token != ""
-            and wifi_type == WifiType.GUEST
-        ):
-            body = {"ssids": {"3": {"Enable": "true" if enable else "false"}}}
-
-            body_str = build_json_from_sjcl(body)
+        if hasattr(self, "session") and self.csrf_token != "":
+            if wifi_type == WifiType.GUEST:
+                body1 = {"ssids": {"3": {"Enable": str(enable).lower()}}}
+                body_str = build_json_from_sjcl(body1)
+            else:
+                body2 = {"wifi": {"X_VODAFONE_WiFiNetwork": str(enable).lower()}}
+                body_str = build_json_from_sjcl(body2)
 
             payload = {"body": body_str, "csrf_token": self.csrf_token}
 
